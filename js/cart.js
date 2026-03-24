@@ -26,33 +26,33 @@ const Cart = {
 
   // ---- Add Item ----
   async addItem(productId, size, qty = 1) {
-    if (Auth.isLoggedIn()) {
-      const userId = Auth.getCurrentUser().id;
-      // Check if item already exists
-      const { data: existing } = await supabase
-        .from('cart_items')
-        .select('id, quantity')
-        .eq('user_id', userId)
-        .eq('product_id', productId)
-        .eq('size', size)
-        .single();
-
-      if (existing) {
-        await supabase
-          .from('cart_items')
-          .update({ quantity: existing.quantity + qty, updated_at: new Date().toISOString() })
-          .eq('id', existing.id);
-      } else {
-        await supabase
-          .from('cart_items')
-          .insert({ user_id: userId, product_id: productId, size, quantity: qty });
-      }
-    } else {
-      const items = this._getLocal();
-      const ex = items.find(i => i.productId === productId && i.size === size);
-      if (ex) { ex.qty += qty; } else { items.push({ productId, size, qty }); }
-      this._saveLocal(items);
+    if (!Auth.isLoggedIn()) {
+      showToast('Please login to add items to cart', 'error');
+      // Optional: window.location.href = 'account.html';
+      return;
     }
+
+    const userId = Auth.getCurrentUser().id;
+    // Check if item already exists
+    const { data: existing } = await supabase
+      .from('cart_items')
+      .select('id, quantity')
+      .eq('user_id', userId)
+      .eq('product_id', productId)
+      .eq('size', size)
+      .single();
+
+    if (existing) {
+      await supabase
+        .from('cart_items')
+        .update({ quantity: existing.quantity + qty, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('cart_items')
+        .insert({ user_id: userId, product_id: productId, size, quantity: qty });
+    }
+    
     this.updateBadge();
     window.dispatchEvent(new Event('cart-updated'));
     showToast('Added to cart!', 'success');
