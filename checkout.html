@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkout — VEERA WEAR</title>
+  <meta name="description" content="Securely complete your VEERA WEAR purchase.">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+
+<body>
+  <header class="site-header" id="site-header"></header>
+  <section class="page-hero">
+    <div class="page-hero__content">
+      <h1 class="page-hero__title">Checkout</h1>
+    </div>
+  </section>
+  <section class="section">
+    <div class="container">
+      <div class="checkout-steps" id="steps-bar">
+        <div class="checkout-step active" data-step="1"><span class="checkout-step__num">1</span> Shipping</div>
+        <div class="checkout-step" data-step="2"><span class="checkout-step__num">2</span> Confirm</div>
+      </div>
+      <div class="checkout-layout">
+        <div id="checkout-forms">
+          <!-- Step 1: Shipping -->
+          <div class="checkout-form" id="step-1">
+            <h3 class="checkout-form__title">Shipping Information</h3>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">First Name</label><input class="form-input"
+                  id="ship-fname" required></div>
+              <div class="form-group"><label class="form-label">Last Name</label><input class="form-input"
+                  id="ship-lname" required></div>
+            </div>
+            <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input"
+                id="ship-email" required></div>
+            <div class="form-group"><label class="form-label">Phone</label><input type="tel" class="form-input"
+                id="ship-phone" required></div>
+            <div class="form-group"><label class="form-label">Address</label><input class="form-input" id="ship-address"
+                required></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">City</label><input class="form-input" id="ship-city"
+                  required></div>
+              <div class="form-group"><label class="form-label">ZIP Code</label><input class="form-input" id="ship-zip"
+                  required></div>
+            </div>
+            <div class="form-group"><label class="form-label">Country</label><select class="form-select"
+                id="ship-country">
+                <option value="India" selected>India</option>
+                <option value="United States">United States</option>
+                <option value="United Kingdom">United Kingdom</option>
+                <option value="Canada">Canada</option>
+                <option value="Australia">Australia</option>
+              </select></div>
+            <button class="btn btn--primary btn--lg btn--full" onclick="goToStep(2)">Review Order</button>
+          </div>
+          <!-- Step 2: Confirm -->
+          <div class="checkout-form" id="step-2" style="display:none;">
+            <h3 class="checkout-form__title">Review Your Order</h3>
+            <div id="order-review"></div>
+            <div style="display:flex;gap:var(--space-4);margin-top:var(--space-6);">
+              <button class="btn btn--ghost" onclick="goToStep(1)">← Back</button>
+              <button class="btn btn--primary btn--lg" style="flex:1;" onclick="placeOrder()">Pay with Razorpay</button>
+            </div>
+          </div>
+          <!-- Confirmation -->
+          <div id="step-done" style="display:none;">
+            <div class="order-confirmation">
+              <div class="order-confirmation__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <h2>Order Confirmed!</h2>
+              <p>Thank you for shopping with VEERA WEAR.</p>
+              <div class="order-confirmation__id" id="confirm-order-id"></div>
+              <p style="font-size:var(--fs-sm);color:var(--color-text-light);">We've sent a confirmation to your email.
+                You can track your order status anytime.</p>
+              <div style="display:flex;gap:var(--space-4);justify-content:center;margin-top:var(--space-6);">
+                <a href="order-tracking.html" class="btn btn--secondary">Track Order</a>
+                <a href="products.html" class="btn btn--outline">Continue Shopping</a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Order Summary Sidebar -->
+        <div class="cart-summary" id="checkout-summary"></div>
+      </div>
+    </div>
+  </section>
+  <footer class="site-footer" id="site-footer"></footer>
+  <!-- Razorpay Checkout JS -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="js/supabase-cdn.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initApp('', async () => {
+        await renderSummary();
+        // Pre-fill email from profile
+        const profile = Auth.getProfile();
+        if (profile) {
+          const nameParts = (profile.full_name || '').split(' ');
+          document.getElementById('ship-fname').value = nameParts[0] || '';
+          document.getElementById('ship-lname').value = nameParts.slice(1).join(' ') || '';
+          document.getElementById('ship-email').value = profile.email || '';
+          document.getElementById('ship-phone').value = profile.phone || '';
+          document.getElementById('ship-address').value = profile.address || '';
+          document.getElementById('ship-city').value = profile.city || '';
+          document.getElementById('ship-zip').value = profile.zip_code || '';
+        }
+      });
+    });
+    async function renderSummary() {
+      const items = await Cart.getItems();
+      const subtotal = await Cart.getTotal();
+      const shipping = subtotal >= 999 ? 0 : 99;
+      const total = subtotal + shipping;
+      document.getElementById('checkout-summary').innerHTML = `
+        <h3 class="cart-summary__title">Order Summary</h3>
+        ${items.map(i => { const p = getProductById(i.productId); return p ? `<div style="display:flex;gap:var(--space-3);padding:var(--space-3) 0;border-bottom:1px solid var(--color-border);"><img src="${p.image}" alt="" style="width:50px;height:60px;object-fit:cover;border-radius:var(--radius-sm);"><div style="flex:1;"><div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold);">${p.name}</div><div style="font-size:var(--fs-xs);color:var(--color-text-light);">Size: ${i.size} × ${i.qty}</div></div><div style="font-size:var(--fs-sm);font-weight:var(--fw-bold);">${formatPrice(p.price * i.qty)}</div></div>` : ''; }).join('')}
+        <div class="cart-summary__row"><span>Subtotal</span><span>${formatPrice(subtotal)}</span></div>
+        <div class="cart-summary__row"><span>Shipping</span><span>${shipping === 0 ? 'Free' : formatPrice(shipping)}</span></div>
+        <div class="cart-summary__total"><span>Total</span><span>${formatPrice(total)}</span></div>`;
+    }
+    function goToStep(n) {
+      if (n === 2) {
+        if (!document.getElementById('ship-fname').value || !document.getElementById('ship-email').value || !document.getElementById('ship-address').value || !document.getElementById('ship-city').value) {
+          showToast('Please fill all shipping fields', 'error');
+          return;
+        }
+        buildReview();
+      }
+      [1, 2].forEach(s => { document.getElementById('step-' + s).style.display = s === n ? '' : 'none'; });
+      document.querySelectorAll('.checkout-step').forEach(el => {
+        const sn = parseInt(el.dataset.step);
+        el.classList.remove('active', 'completed');
+        if (sn < n) el.classList.add('completed');
+        if (sn === n) el.classList.add('active');
+      });
+    }
+    async function buildReview() {
+      const items = await Cart.getItems();
+      document.getElementById('order-review').innerHTML = `
+        <div style="margin-bottom:var(--space-6);padding:var(--space-4);background:var(--color-bg-alt);border-radius:var(--radius-md);">
+          <h5 style="margin-bottom:var(--space-2);">Shipping To</h5>
+          <p style="font-size:var(--fs-sm);margin:0;">${document.getElementById('ship-fname').value} ${document.getElementById('ship-lname').value}<br>${document.getElementById('ship-address').value}<br>${document.getElementById('ship-city').value}, ${document.getElementById('ship-zip').value}<br>${document.getElementById('ship-country').value}</p>
+        </div>
+        <div style="margin-bottom:var(--space-4);">
+          <h5 style="margin-bottom:var(--space-2);">Items (${items.length})</h5>
+          ${items.map(i => { const p = getProductById(i.productId); return p ? `<div style="display:flex;justify-content:space-between;font-size:var(--fs-sm);padding:var(--space-2) 0;"><span>${p.name} × ${i.qty}</span><span>${formatPrice(p.price * i.qty)}</span></div>` : '' }).join('')}
+        </div>`;
+    }
+    async function placeOrder() {
+      const orderNumber = generateOrderId();
+      const items = await Cart.getItems();
+      if (!items || items.length === 0) {
+        showToast('Your cart is empty!', 'error');
+        return;
+      }
+
+      const subtotal = await Cart.getTotal();
+      const shipping = subtotal >= 999 ? 0 : 99;
+      const total = subtotal + shipping;
+      const fullName = document.getElementById('ship-fname').value + ' ' + document.getElementById('ship-lname').value;
+      const shippingDetails = {
+        full_name: fullName,
+        email: document.getElementById('ship-email').value,
+        phone: document.getElementById('ship-phone').value,
+        address: document.getElementById('ship-address').value,
+        city: document.getElementById('ship-city').value,
+        zip_code: document.getElementById('ship-zip').value,
+        country: document.getElementById('ship-country').value,
+      };
+
+      try {
+        // 1. Create Razorpay order on our Node server
+        const orderResponse = await fetch('http://localhost:3000/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: total, receipt: orderNumber })
+        });
+        const orderData = await orderResponse.json();
+        if (!orderData.success) throw new Error(orderData.message || 'Failed to create payment order');
+
+        // 2. Open Razorpay Modal
+        const options = {
+          key: "rzp_live_STph8cw1DKfcZq",
+          amount: orderData.order.amount,
+          currency: "INR",
+          name: "VEERA WEAR",
+          description: "Order " + orderNumber,
+          order_id: orderData.order.id,
+          handler: async function (response) {
+            try {
+              // 3. Verify Payment
+              const verifyResponse = await fetch('http://localhost:3000/verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(response)
+              });
+              const verifyData = await verifyResponse.json();
+              if (!verifyData.success) throw new Error("Payment verification failed. Potential tampering.");
+
+              // 4. Secure Verification Passed! Save order
+              if (Auth.isLoggedIn()) {
+                const user = Auth.getCurrentUser();
+                const order = {
+                  order_number: orderNumber,
+                  user_id: user.id,
+                  email: shippingDetails.email,
+                  full_name: shippingDetails.full_name,
+                  phone: shippingDetails.phone,
+                  shipping_address: shippingDetails.address,
+                  city: shippingDetails.city,
+                  zip_code: shippingDetails.zip_code,
+                  country: shippingDetails.country,
+                  subtotal: subtotal,
+                  shipping_cost: shipping,
+                  total: total,
+                  status: 'processing',
+                  payment_method: 'razorpay',
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  placed_at: new Date().toISOString()
+                };
+
+                const { data, error } = await supabase.from('orders').insert(order).select('id').single();
+                if (error) throw error;
+
+                const orderItems = items.map(i => {
+                  const p = getProductById(i.productId);
+                  return {
+                    order_id: data.id,
+                    product_id: i.productId,
+                    product_name: p ? p.name : '',
+                    product_image: p ? p.image : '',
+                    size: i.size,
+                    quantity: i.qty,
+                    unit_price: p ? p.price : 0,
+                    total_price: p ? p.price * i.qty : 0
+                  };
+                });
+                await supabase.from('order_items').insert(orderItems);
+                await Auth.updateProfile(fullName, shippingDetails.email, shippingDetails.phone, shippingDetails.address, shippingDetails.city, shippingDetails.zip_code, shippingDetails.country);
+              } else {
+                // Guest fallback
+                const order = { id: orderNumber, items, total, email: shippingDetails.email, status: 'processing', date: new Date().toISOString(), steps: [{ name: 'Order Placed', date: new Date().toISOString(), done: true }, { name: 'Processing', date: '', done: false }] };
+                const orders = JSON.parse(localStorage.getItem('veerawear_orders') || '[]');
+                orders.push(order);
+                localStorage.setItem('veerawear_orders', JSON.stringify(orders));
+              }
+
+              await Cart.clear();
+              document.getElementById('confirm-order-id').textContent = orderNumber;
+              showToast('Order Confirmed!', 'success');
+              document.getElementById('step-2').style.display = 'none';
+              document.getElementById('step-done').style.display = '';
+              document.getElementById('checkout-summary').style.display = 'none';
+              document.getElementById('steps-bar').style.display = 'none';
+
+            } catch (err) {
+              console.error(err);
+              showToast(err.message || 'Error saving verified order.', 'error');
+            }
+          },
+          prefill: {
+            name: shippingDetails.full_name,
+            email: shippingDetails.email,
+            contact: shippingDetails.phone
+          },
+          theme: { color: "#d8ac54" }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (response) {
+          console.error("Payment Failed", response.error);
+          showToast(`Payment Failed: ${response.error.description}`, 'error');
+        });
+        rzp.open();
+
+      } catch (err) {
+        console.error("Checkout Request Error:", err);
+        showToast(err.message || 'Error connecting to payment server. Make sure server.js is running.', 'error');
+      }
+    }
+  </script>
+</body>
+
+</html>

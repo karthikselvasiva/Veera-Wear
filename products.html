@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop All Products — VEERA WEAR</title>
+  <meta name="description" content="Browse VEERA WEAR's complete collection. Filter by category, price, and sort to find your perfect piece.">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+  <header class="site-header" id="site-header"></header>
+  <section class="page-hero">
+    <div class="page-hero__content">
+      <h1 class="page-hero__title" id="page-title">All Products</h1>
+      <p class="page-hero__subtitle" id="page-subtitle">Explore our curated collection</p>
+    </div>
+  </section>
+  <section class="section">
+    <div class="container">
+      <div class="sidebar-layout">
+        <aside class="filter-sidebar">
+          <div class="filter-group">
+            <h4 class="filter-group__title">Category</h4>
+            <label class="filter-option"><input type="radio" name="category" value="all" checked onchange="applyFilters()"> All</label>
+            <label class="filter-option"><input type="radio" name="category" value="men" onchange="applyFilters()"> Men</label>
+            <label class="filter-option"><input type="radio" name="category" value="women" onchange="applyFilters()"> Women</label>
+          </div>
+          <div class="filter-group">
+            <h4 class="filter-group__title">Price Range</h4>
+            <div class="price-range">
+              <input type="number" class="form-input" id="price-min" placeholder="Min" style="width:90px" onchange="applyFilters()">
+              <span>—</span>
+              <input type="number" class="form-input" id="price-max" placeholder="Max" style="width:90px" onchange="applyFilters()">
+            </div>
+          </div>
+          <div class="filter-group">
+            <h4 class="filter-group__title">Sort By</h4>
+            <select class="form-select" id="sort-select" onchange="applyFilters()">
+              <option value="featured">Featured</option>
+              <option value="price-asc">Price: Low → High</option>
+              <option value="price-desc">Price: High → Low</option>
+              <option value="newest">Newest First</option>
+              <option value="rating">Top Rated</option>
+            </select>
+          </div>
+          <button class="btn btn--outline btn--full" onclick="resetFilters()">Reset Filters</button>
+        </aside>
+        <div>
+          <div class="results-header">
+            <span class="results-count" id="results-count">12 products</span>
+          </div>
+          <div class="grid grid--products stagger" id="products-grid"></div>
+          <div id="empty-state" style="display:none;text-align:center;padding:var(--space-16);">
+            <div style="font-size:3rem;margin-bottom:var(--space-4);">🔍</div>
+            <h3>No products found</h3>
+            <p>Try adjusting your filters to find what you're looking for.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <footer class="site-footer" id="site-footer"></footer>
+  <script src="js/supabase-cdn.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    let currentCategory = 'all';
+    document.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const cat = params.get('category');
+      let activePage = '';
+      if (cat === 'men') { currentCategory = 'men'; setTitle("Men's Collection", "Refined essentials for the modern man"); setRadio('men'); activePage = 'men'; }
+      else if (cat === 'women') { currentCategory = 'women'; setTitle("Women's Collection", "Elegant pieces for every occasion"); setRadio('women'); activePage = 'women'; }
+      else if (cat === 'new') { currentCategory = 'all'; setTitle("New Arrivals", "Fresh styles just landed"); activePage = 'new'; }
+      initApp(activePage, () => { applyFilters(); });
+    });
+    function setTitle(t, s) { document.getElementById('page-title').textContent = t; document.getElementById('page-subtitle').textContent = s; document.title = t + ' — VEERA WEAR'; }
+    function setRadio(val) { const r = document.querySelector(`input[name="category"][value="${val}"]`); if (r) r.checked = true; }
+    function applyFilters() {
+      const params = new URLSearchParams(window.location.search);
+      const isNewArrivals = params.get('category') === 'new';
+      const catRadio = document.querySelector('input[name="category"]:checked');
+      const category = catRadio ? catRadio.value : 'all';
+      const minP = parseFloat(document.getElementById('price-min').value) || 0;
+      const maxP = parseFloat(document.getElementById('price-max').value) || Infinity;
+      const sort = document.getElementById('sort-select').value;
+      let products = isNewArrivals ? getNewArrivals() : (category === 'all' ? (window.SITE_PRODUCTS || PRODUCTS) : getProductsByCategory(category));
+      products = products.filter(p => p.price >= minP && p.price <= maxP);
+      if (sort === 'price-asc') products.sort((a,b) => a.price - b.price);
+      else if (sort === 'price-desc') products.sort((a,b) => b.price - a.price);
+      else if (sort === 'newest') products.sort((a,b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+      else if (sort === 'rating') products.sort((a,b) => b.rating - a.rating);
+      const grid = document.getElementById('products-grid');
+      const empty = document.getElementById('empty-state');
+      document.getElementById('results-count').textContent = `${products.length} product${products.length!==1?'s':''}`;
+      if (products.length === 0) { grid.style.display='none'; empty.style.display='block'; }
+      else { grid.style.display=''; empty.style.display='none'; grid.innerHTML = products.map(p => renderProductCard(p)).join(''); }
+    }
+    function resetFilters() {
+      document.querySelector('input[name="category"][value="all"]').checked = true;
+      document.getElementById('price-min').value = '';
+      document.getElementById('price-max').value = '';
+      document.getElementById('sort-select').value = 'featured';
+      applyFilters();
+    }
+  </script>
+</body>
+</html>

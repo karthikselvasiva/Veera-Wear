@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Products — VEERA WEAR Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="admin-root"></div>
+
+  <!-- Product Modal -->
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal">
+      <div class="modal__header">
+        <h3 class="modal__title" id="modal-title">Add Product</h3>
+        <button class="modal__close" onclick="closeModal()">✕</button>
+      </div>
+      <form id="product-form" onsubmit="saveProduct(event)">
+        <input type="hidden" id="edit-id">
+        <div class="aform-group">
+          <label class="aform-label">Product Name *</label>
+          <input class="aform-input" id="p-name" placeholder="e.g. Midnight Velvet Blazer" required>
+        </div>
+        <div class="aform-row">
+          <div class="aform-group">
+            <label class="aform-label">Price (Rs.) *</label>
+            <input type="number" step="0.01" min="0" class="aform-input" id="p-price" placeholder="1999.00" required>
+          </div>
+          <div class="aform-group">
+            <label class="aform-label">Old Price (Rs.)</label>
+            <input type="number" step="0.01" min="0" class="aform-input" id="p-old-price" placeholder="Optional">
+          </div>
+        </div>
+        <div class="aform-row">
+          <div class="aform-group">
+            <label class="aform-label">Category *</label>
+            <select class="aform-select" id="p-category">
+              <option value="men">Men</option>
+              <option value="women">Women</option>
+              <option value="new">New Arrivals</option>
+            </select>
+          </div>
+          <div class="aform-group">
+            <label class="aform-label">Badge</label>
+            <input class="aform-input" id="p-badge" placeholder="Sale, New, Hot...">
+          </div>
+        </div>
+        <div class="aform-group">
+          <label class="aform-label">Product Image (Upload or URL) *</label>
+          <div style="display:flex;gap:10px;margin-bottom:8px;">
+            <input type="file" id="p-image-file" class="aform-input" accept="image/*" onchange="uploadImage(event)" style="flex:1;">
+            <input class="aform-input" id="p-image" placeholder="Or enter https://..." oninput="previewImage(this.value)" style="flex:1;" required>
+          </div>
+          <div class="image-preview" id="image-preview"></div>
+        </div>
+        <div class="aform-group">
+          <label class="aform-label">Available Sizes *</label>
+          <input class="aform-input" id="p-sizes" placeholder="S, M, L, XL" value="S, M, L, XL" required>
+          <div style="font-size:11px;color:var(--admin-text-muted);margin-top:4px;">Enter comma-separated sizes</div>
+        </div>
+        <div class="aform-group">
+          <label class="aform-label">Description *</label>
+          <textarea class="aform-textarea" id="p-desc" placeholder="Describe the product..." required></textarea>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button type="button" class="abtn abtn--ghost" style="flex:1;justify-content:center;" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="abtn abtn--primary" style="flex:1;justify-content:center;" id="save-btn">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="../js/supabase-cdn.js"></script>
+  <script src="../js/supabase.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/cart.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let allProducts = [];
+    let viewMode = 'table'; // 'table' or 'grid'
+
+    function toast(msg, type='success') {
+      let c = document.querySelector('.toast-container');
+      if (!c) { c = document.createElement('div'); c.className = 'toast-container'; document.body.appendChild(c); }
+      const t = document.createElement('div');
+      t.className = `toast toast--${type}`;
+      const icons = { success:'✓', error:'✕', info:'ℹ' };
+      t.innerHTML = `<span>${icons[type]||'•'}</span><span>${msg}</span>`;
+      c.appendChild(t);
+      setTimeout(() => { t.style.opacity='0'; t.style.transition='all 0.3s ease'; }, 2800);
+      setTimeout(() => t.remove(), 3200);
+    }
+
+    function formatRs(n) { return 'Rs. ' + parseFloat(n||0).toFixed(2); }
+
+    function sidebar() {
+      return `
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar__logo">VEERA<span>WEAR</span> <span class="admin-sidebar__badge">ADMIN</span></div>
+          <nav class="admin-nav">
+            <div class="admin-nav__section">Main Menu</div>
+            <a href="index.html" class="admin-nav__link"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="8" y2="16"/><line x1="16" y1="10" x2="16" y2="16"/></svg></span> Dashboard</a>
+            <a href="products.html" class="admin-nav__link active"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span> Products</a>
+            <a href="orders.html" class="admin-nav__link"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span> Orders</a>
+            <a href="customers.html" class="admin-nav__link"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Customers</a>
+            <div class="admin-nav__section" style="margin-top:12px;">Account</div>
+            <a href="../index.html" class="admin-nav__link" target="_blank"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span> View Shop</a>
+            <a href="#" class="admin-nav__link" onclick="AdminAuth.logout();window.location='index.html'"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span> Logout</a>
+          </nav>
+        </aside>
+        <div class="admin-sidebar-overlay" onclick="document.querySelector('.admin-sidebar').classList.remove('open'); this.classList.remove('active');"></div>`;
+    }
+
+    async function loadProducts() {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        // Table doesn't exist yet — show message
+        console.warn('Products table missing. Run sql/products_table.sql in Supabase.', error.message);
+        allProducts = [];
+        return;
+      }
+      if (!data || data.length === 0) {
+        // Table is empty — seed it from static data (one-time migration)
+        console.log('Seeding static products into Supabase...');
+        const toInsert = PRODUCTS.map(p => ({
+          id: p.id,
+          name: p.name, category: p.category, subcategory: p.subcategory || null,
+          price: p.price, old_price: p.oldPrice || null, badge: p.badge || null,
+          image: p.image, images: p.images || [p.image],
+          sizes: p.sizes, description: p.description,
+          rating: p.rating, reviews: p.reviews,
+          is_new: p.isNew || false, is_active: true
+        }));
+        const { data: seeded } = await supabase.from('products').insert(toInsert).select();
+        allProducts = seeded || [];
+      } else {
+        allProducts = data;
+      }
+    }
+
+    async function render(searchTerm = '', categoryFilter = '') {
+      await loadProducts();
+
+      let filtered = allProducts;
+      if (searchTerm) filtered = filtered.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (categoryFilter) filtered = filtered.filter(p => p.category === categoryFilter);
+
+      document.getElementById('admin-root').innerHTML = `
+        ${sidebar()}
+        <div class="admin-main">
+          <div class="admin-topbar">
+            <div style="display:flex;align-items:center;">
+              <button class="mobile-toggle-btn" onclick="document.querySelector('.admin-sidebar').classList.toggle('open'); document.querySelector('.admin-sidebar-overlay').classList.toggle('active');" aria-label="Toggle Sidebar"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+              <div class="admin-topbar__title">Products (${allProducts.length})</div>
+            </div>
+            <div class="admin-topbar__actions">
+              <div class="view-toggle">
+                <button class="view-toggle-btn ${viewMode==='table'?'active':''}" onclick="setView('table')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Table</button>
+                <button class="view-toggle-btn ${viewMode==='grid'?'active':''}" onclick="setView('grid')">⊞ Grid</button>
+              </div>
+              <button class="abtn abtn--primary" onclick="openAddModal()">+ Add Product</button>
+            </div>
+          </div>
+          <div class="admin-content">
+            ${allProducts.length === 0 ? `<div class="empty-state" style="margin-bottom:20px;"><div class="empty-state__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="empty-state__title">Products table not found</div><p>Please run <strong>sql/products_table.sql</strong> in your Supabase SQL Editor to enable product management.</p></div>` : ''}
+            <div class="filter-bar">
+              <input type="search" class="search-input" placeholder="Search products..." id="search-input"
+                value="${searchTerm}" oninput="render(this.value, document.getElementById('cat-filter').value)">
+              <select class="filter-select" id="cat-filter" onchange="render(document.getElementById('search-input').value, this.value)">
+                <option value="">All Categories</option>
+                <option value="men" ${categoryFilter==='men'?'selected':''}>Men</option>
+                <option value="women" ${categoryFilter==='women'?'selected':''}>Women</option>
+                <option value="new" ${categoryFilter==='new'?'selected':''}>New Arrivals</option>
+              </select>
+              <span style="color:var(--admin-text-muted);font-size:12px;margin-left:auto;">${filtered.length} product${filtered.length!==1?'s':''} found</span>
+            </div>
+
+            ${filtered.length === 0 && allProducts.length > 0 ? `
+              <div class="empty-state">
+                <div class="empty-state__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+                <div class="empty-state__title">No products found</div>
+                <p>Try adjusting your search or <a href="#" onclick="openAddModal()" style="color:var(--admin-accent);">add a new product</a>.</p>
+              </div>` 
+              : viewMode === 'grid' ? renderGrid(filtered) : renderTable(filtered)}
+          </div>
+        </div>`;
+    }
+
+    function renderTable(products) {
+      return `
+        <div class="table-card">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width:60px;">Image</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Sizes</th>
+                <th>Badge</th>
+                <th style="width:160px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${products.map(p => `
+                <tr>
+                  <td><img src="${p.image}" style="width:48px;height:58px;object-fit:cover;border-radius:6px;" onerror="this.src='https://via.placeholder.com/48x58?text=IMG'"></td>
+                  <td>
+                    <div style="font-weight:600;">${p.name}</div>
+                    <div style="font-size:11px;color:var(--admin-text-muted);">${(p.description||'').substring(0,50)}${(p.description||'').length>50?'...':''}</div>
+                  </td>
+                  <td><span class="abadge abadge--blue">${p.category}</span></td>
+                  <td>
+                    <div style="font-weight:700;color:var(--admin-accent);">${formatRs(p.price)}</div>
+                    ${p.old_price ? `<div style="font-size:11px;color:var(--admin-text-muted);text-decoration:line-through;">${formatRs(p.old_price)}</div>` : ''}
+                  </td>
+                  <td style="font-size:12px;">${(p.sizes||[]).join(', ')}</td>
+                  <td>${p.badge ? `<span class="abadge abadge--accent">${p.badge}</span>` : '<span class="abadge abadge--muted">—</span>'}</td>
+                  <td>
+                    <div style="display:flex;gap:6px;">
+                      <button class="abtn abtn--ghost abtn--sm" onclick="openEditModal(${p.id})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit</button>
+                      <button class="abtn abtn--danger abtn--sm" onclick="deleteProduct(${p.id})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> Del</button>
+                    </div>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderGrid(products) {
+      return `<div class="product-admin-grid">
+        ${products.map(p => `
+          <div class="product-admin-card">
+            <img class="product-admin-card__img" src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/200x160?text=IMG'">
+            <div class="product-admin-card__body">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span class="abadge abadge--blue" style="font-size:10px;">${p.category}</span>
+                ${p.badge ? `<span class="abadge abadge--accent" style="font-size:10px;">${p.badge}</span>` : ''}
+              </div>
+              <div class="product-admin-card__name">${p.name}</div>
+              <div class="product-admin-card__price">${formatRs(p.price)}</div>
+              <div class="product-admin-card__actions">
+                <button class="abtn abtn--ghost abtn--sm" style="flex:1;justify-content:center;" onclick="openEditModal(${p.id})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Edit</button>
+                <button class="abtn abtn--danger abtn--sm" onclick="deleteProduct(${p.id})"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+    }
+
+    function setView(mode) { viewMode = mode; render(); }
+
+    function previewImage(url) {
+      const preview = document.getElementById('image-preview');
+      if (!preview) return;
+      if (url) {
+        preview.innerHTML = `<img src="${url}" onerror="this.parentElement.innerHTML='<span style=color:var(--admin-text-muted)>Invalid URL</span>'">`;
+      } else {
+        preview.innerHTML = '';
+      }
+    }
+
+    async function uploadImage(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const saveBtn = document.getElementById('save-btn');
+      const originalText = saveBtn.textContent;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Uploading...';
+
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(filePath);
+
+        document.getElementById('p-image').value = data.publicUrl;
+        previewImage(data.publicUrl);
+        toast('Image uploaded successfully', 'success');
+      } catch (err) {
+        console.error('Upload Error:', err);
+        toast('Upload failed: ' + err.message, 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
+        e.target.value = ''; // Reset file input
+      }
+    }
+
+    function openAddModal() {
+      document.getElementById('modal-title').textContent = 'Add New Product';
+      document.getElementById('edit-id').value = '';
+      document.getElementById('product-form').reset();
+      document.getElementById('p-sizes').value = 'S, M, L, XL';
+      document.getElementById('image-preview').innerHTML = '';
+      document.getElementById('save-btn').textContent = 'Add Product';
+      document.getElementById('product-modal').classList.add('active');
+    }
+
+    function openEditModal(id) {
+      const p = allProducts.find(x => x.id == id);
+      if (!p) return;
+      document.getElementById('modal-title').textContent = 'Edit Product';
+      document.getElementById('edit-id').value = p.id;
+      document.getElementById('p-name').value = p.name || '';
+      document.getElementById('p-price').value = p.price || '';
+      document.getElementById('p-old-price').value = p.old_price || p.oldPrice || '';
+      document.getElementById('p-category').value = p.category || 'men';
+      document.getElementById('p-badge').value = p.badge || '';
+      document.getElementById('p-image').value = p.image || '';
+      document.getElementById('p-desc').value = p.description || '';
+      document.getElementById('p-sizes').value = (p.sizes || ['S','M','L','XL']).join(', ');
+      previewImage(p.image);
+      document.getElementById('save-btn').textContent = 'Update Product';
+      document.getElementById('product-modal').classList.add('active');
+    }
+
+    function closeModal() { document.getElementById('product-modal').classList.remove('active'); }
+
+    async function saveProduct(e) {
+      e.preventDefault();
+      const saveBtn = document.getElementById('save-btn');
+      saveBtn.textContent = 'Saving...'; saveBtn.disabled = true;
+
+      const editId = document.getElementById('edit-id').value;
+      const sizes = document.getElementById('p-sizes').value.split(',').map(s => s.trim()).filter(Boolean);
+      const oldPriceVal = document.getElementById('p-old-price').value;
+
+      const prod = {
+        name: document.getElementById('p-name').value.trim(),
+        price: parseFloat(document.getElementById('p-price').value),
+        old_price: oldPriceVal ? parseFloat(oldPriceVal) : null,
+        category: document.getElementById('p-category').value,
+        badge: document.getElementById('p-badge').value.trim() || null,
+        image: document.getElementById('p-image').value.trim(),
+        images: [document.getElementById('p-image').value.trim()],
+        sizes,
+        description: document.getElementById('p-desc').value.trim(),
+        is_new: document.getElementById('p-category').value === 'new',
+        is_active: true
+      };
+
+      try {
+        let error;
+        if (editId) {
+          ({ error } = await supabase.from('products').update(prod).eq('id', editId));
+        } else {
+          prod.rating = 4.5; prod.reviews = 0;
+          ({ error } = await supabase.from('products').insert(prod));
+        }
+
+        if (error) throw error;
+        toast(editId ? 'Product updated!' : 'Product added!', 'success');
+        closeModal();
+        await render();
+      } catch (err) {
+        console.error('Save error:', err);
+        toast('Error saving product: ' + (err.message || 'Unknown error'), 'error');
+      } finally {
+        saveBtn.textContent = editId ? 'Update Product' : 'Add Product';
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function deleteProduct(id) {
+      if (!confirm('<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Are you sure you want to remove this product? It will be hidden from the store.')) return;
+      
+      // We use SOFT DELETE (is_active = false) because hard deleting 
+      // a product might break existing order history or reviews tied to this ID.
+      const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
+      
+      if (error) { 
+        toast('Error deleting product: ' + error.message, 'error'); 
+        return; 
+      }
+      
+      toast('Product removed from store', 'info');
+      await render();
+    }
+
+    // Close modal on overlay click
+    document.getElementById('product-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', async () => {
+      await Auth.init();
+      const isAdmin = await AdminAuth.isLoggedIn();
+      if (!isAdmin) { window.location.href = 'index.html'; return; }
+      await render();
+    });
+  </script>
+</body>
+</html>

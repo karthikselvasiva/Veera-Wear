@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orders — VEERA WEAR Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="admin-root"></div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal-overlay" id="order-modal">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal__header">
+        <h3 class="modal__title">Order Details</h3>
+        <button class="modal__close" onclick="closeOrderModal()">✕</button>
+      </div>
+      <div id="order-detail-content"></div>
+    </div>
+  </div>
+
+  <script src="../js/supabase-cdn.js"></script>
+  <script src="../js/supabase.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/cart.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    let allOrders = [];
+
+    function toast(msg, type='success') {
+      let c = document.querySelector('.toast-container');
+      if (!c) { c = document.createElement('div'); c.className = 'toast-container'; document.body.appendChild(c); }
+      const t = document.createElement('div');
+      t.className = `toast toast--${type}`;
+      const icons = { success: '✓', error: '✕', info: 'ℹ' };
+      t.innerHTML = `<span>${icons[type]||'•'}</span><span>${msg}</span>`;
+      c.appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'all 0.3s ease'; }, 2800);
+      setTimeout(() => t.remove(), 3200);
+    }
+
+    function formatRs(n) { return 'Rs. ' + parseFloat(n || 0).toFixed(2); }
+
+    function sidebar() {
+      return `
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar__logo">VEERA<span>WEAR</span> <span class="admin-sidebar__badge">ADMIN</span></div>
+          <nav class="admin-nav">
+            <div class="admin-nav__section">Main Menu</div>
+            <a href="index.html" class="admin-nav__link"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="8" y2="16"/><line x1="16" y1="10" x2="16" y2="16"/></svg></span> Dashboard</a>
+            <a href="products.html" class="admin-nav__link"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span> Products</a>
+            <a href="orders.html" class="admin-nav__link active"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span> Orders</a>
+            <a href="customers.html" class="admin-nav__link"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Customers</a>
+            <div class="admin-nav__section" style="margin-top:12px;">Account</div>
+            <a href="../index.html" class="admin-nav__link" target="_blank"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span> View Shop</a>
+            <a href="#" class="admin-nav__link" onclick="AdminAuth.logout();window.location='index.html'"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span> Logout</a>
+          </nav>
+        </aside>
+        <div class="admin-sidebar-overlay" onclick="document.querySelector('.admin-sidebar').classList.remove('open'); this.classList.remove('active');"></div>`;
+    }
+
+    async function render(searchTerm = '', statusFilter = '') {
+      const { data } = await supabase.from('orders').select('*').order('placed_at', { ascending: false });
+      allOrders = data || [];
+
+      let filtered = allOrders;
+      if (searchTerm) filtered = filtered.filter(o =>
+        (o.order_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (o.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (o.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      if (statusFilter) filtered = filtered.filter(o => o.status === statusFilter);
+
+      const totalRevenue = allOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+      const processing = allOrders.filter(o => o.status === 'processing').length;
+      const shipped = allOrders.filter(o => o.status === 'shipped').length;
+      const delivered = allOrders.filter(o => o.status === 'delivered').length;
+
+      document.getElementById('admin-root').innerHTML = `
+        ${sidebar()}
+        <div class="admin-main">
+          <div class="admin-topbar">
+            <div style="display:flex;align-items:center;">
+              <button class="mobile-toggle-btn" onclick="document.querySelector('.admin-sidebar').classList.toggle('open'); document.querySelector('.admin-sidebar-overlay').classList.toggle('active');" aria-label="Toggle Sidebar"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+              <div class="admin-topbar__title">Orders (${allOrders.length})</div>
+            </div>
+            <div class="admin-topbar__actions">
+              <span style="font-size:13px;color:var(--admin-accent);font-weight:700;">Total: ${formatRs(totalRevenue)}</span>
+            </div>
+          </div>
+          <div class="admin-content">
+
+            <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+              <div class="kpi-card" style="padding:14px;">
+                <div class="kpi-card__label">All Orders</div>
+                <div class="kpi-card__value" style="font-size:20px;">${allOrders.length}</div>
+              </div>
+              <div class="kpi-card kpi-card--blue" style="padding:14px;">
+                <div class="kpi-card__label">Processing</div>
+                <div class="kpi-card__value" style="font-size:20px;color:var(--admin-blue);">${processing}</div>
+              </div>
+              <div class="kpi-card kpi-card--red" style="padding:14px;">
+                <div class="kpi-card__label">Shipped</div>
+                <div class="kpi-card__value" style="font-size:20px;color:var(--admin-orange);">${shipped}</div>
+              </div>
+              <div class="kpi-card kpi-card--green" style="padding:14px;">
+                <div class="kpi-card__label">Delivered</div>
+                <div class="kpi-card__value" style="font-size:20px;color:var(--admin-green);">${delivered}</div>
+              </div>
+            </div>
+
+            <div class="filter-bar">
+              <input type="search" class="search-input" placeholder="Search by Order ID, name, email..." id="search-input"
+                value="${searchTerm}" oninput="render(this.value, document.getElementById('status-filter').value)">
+              <select class="filter-select" id="status-filter" onchange="render(document.getElementById('search-input').value, this.value)">
+                <option value="">All Status</option>
+                <option value="processing" ${statusFilter==='processing'?'selected':''}>Processing</option>
+                <option value="shipped" ${statusFilter==='shipped'?'selected':''}>Shipped</option>
+                <option value="delivered" ${statusFilter==='delivered'?'selected':''}>Delivered</option>
+              </select>
+              <span style="color:var(--admin-text-muted);font-size:12px;margin-left:auto;">${filtered.length} result${filtered.length!==1?'s':''}</span>
+            </div>
+
+            ${filtered.length === 0 ? `
+              <div class="empty-state">
+                <div class="empty-state__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></div>
+                <div class="empty-state__title">No orders found</div>
+                <p>Try adjusting your search or filters.</p>
+              </div>` : `
+            <div class="table-card">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Date</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Payment</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filtered.map(o => `
+                    <tr>
+                      <td style="font-family:monospace;font-size:12px;font-weight:600;">${o.order_number}</td>
+                      <td style="font-size:12px;">${new Date(o.placed_at || o.created_at).toLocaleDateString('en-IN')}</td>
+                      <td>
+                        <div style="font-weight:600;">${o.full_name || 'Guest'}</div>
+                        <div style="font-size:11px;color:var(--admin-text-muted);">${o.email || ''}</div>
+                      </td>
+                      <td style="text-align:center;">${o.item_count || '—'}</td>
+                      <td style="font-weight:700;color:var(--admin-accent);">${formatRs(o.total)}</td>
+                      <td><span class="abadge ${o.payment_method==='razorpay'?'abadge--green':'abadge--muted'}">${o.payment_method || 'card'}</span></td>
+                      <td>
+                        <select class="status-select" onchange="updateStatus('${o.order_number}', this.value)">
+                          <option value="processing" ${o.status==='processing'?'selected':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:#3b82f6;margin-right:6px;vertical-align:middle;"></span> Processing</option>
+                          <option value="shipped" ${o.status==='shipped'?'selected':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:#eab308;margin-right:6px;vertical-align:middle;"></span> Shipped</option>
+                          <option value="delivered" ${o.status==='delivered'?'selected':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:#22c55e;margin-right:6px;vertical-align:middle;"></span> Delivered</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button class="abtn abtn--ghost abtn--sm" onclick="viewOrder('${o.order_number}')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> View</button>
+                      </td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>`}
+          </div>
+        </div>`;
+    }
+
+    async function updateStatus(orderNumber, status) {
+      const updates = { status, updated_at: new Date().toISOString() };
+      if (status === 'shipped') updates.shipped_at = new Date().toISOString();
+      if (status === 'delivered') { updates.delivered_at = new Date().toISOString(); if (!updates.shipped_at) updates.shipped_at = new Date().toISOString(); }
+      const { error } = await supabase.from('orders').update(updates).eq('order_number', orderNumber);
+      if (error) { toast('Failed to update status', 'error'); return; }
+      toast(`Order marked as ${status}`, 'success');
+    }
+
+    async function viewOrder(orderNumber) {
+      const order = allOrders.find(o => o.order_number === orderNumber);
+      if (!order) return;
+      const { data: items } = await supabase.from('order_items').select('*').eq('order_id', order.id);
+      const orderItems = items || [];
+      document.getElementById('order-detail-content').innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+          <div>
+            <div class="aform-label">Order Number</div>
+            <div style="font-family:monospace;font-weight:700;">${order.order_number}</div>
+          </div>
+          <div>
+            <div class="aform-label">Date</div>
+            <div>${new Date(order.placed_at||order.created_at).toLocaleString('en-IN')}</div>
+          </div>
+          <div>
+            <div class="aform-label">Customer</div>
+            <div style="font-weight:600;">${order.full_name || 'Guest'}</div>
+            <div style="font-size:12px;color:var(--admin-text-muted);">${order.email || ''}</div>
+          </div>
+          <div>
+            <div class="aform-label">Phone</div>
+            <div>${order.phone || 'N/A'}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div class="aform-label">Shipping Address</div>
+          <div style="background:var(--admin-surface-2);padding:10px;border-radius:8px;font-size:13px;line-height:1.8;">
+            ${order.shipping_address || ''}<br>${order.city || ''}, ${order.zip_code || ''}<br>${order.country || ''}
+          </div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div class="aform-label">Items</div>
+          ${orderItems.length === 0 ? '<p style="color:var(--admin-text-muted);">Item details not available.</p>' : 
+          orderItems.map(i => `
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--admin-border);font-size:13px;">
+              <div><span style="font-weight:600;">${i.product_name}</span> × ${i.quantity} <span class="abadge abadge--muted">${i.size}</span></div>
+              <div style="font-weight:700;">${formatRs(i.total_price)}</div>
+            </div>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px;color:var(--admin-text-muted);">
+          <span>Subtotal</span><span>${formatRs(order.subtotal)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px;color:var(--admin-text-muted);">
+          <span>Shipping</span><span>${parseFloat(order.shipping_cost||0) === 0 ? 'Free' : formatRs(order.shipping_cost)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0;font-size:16px;font-weight:700;border-top:1px solid var(--admin-border);">
+          <span>Total</span><span style="color:var(--admin-accent);">${formatRs(order.total)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+          <span class="abadge ${order.payment_method==='razorpay'?'abadge--green':'abadge--muted'}">💳 ${order.payment_method || 'card'}</span>
+          <span class="abadge ${order.status==='delivered'?'abadge--green':order.status==='shipped'?'abadge--orange':'abadge--blue'}">${order.status}</span>
+        </div>`;
+      document.getElementById('order-modal').classList.add('active');
+    }
+
+    function closeOrderModal() { document.getElementById('order-modal').classList.remove('active'); }
+    document.getElementById('order-modal').addEventListener('click', function(e) { if (e.target === this) closeOrderModal(); });
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await Auth.init();
+      const isAdmin = await AdminAuth.isLoggedIn();
+      if (!isAdmin) { window.location.href = 'index.html'; return; }
+      await render();
+    });
+  </script>
+</body>
+</html>

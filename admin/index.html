@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — VEERA WEAR</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div id="admin-root"></div>
+
+  <script src="../js/supabase-cdn.js"></script>
+  <script src="../js/supabase.js"></script>
+  <script src="../js/data.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/cart.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    // ── Toast ──
+    function toast(msg, type='success') {
+      let c = document.querySelector('.toast-container');
+      if (!c) { c = document.createElement('div'); c.className = 'toast-container'; document.body.appendChild(c); }
+      const t = document.createElement('div');
+      t.className = `toast toast--${type}`;
+      const icons = { success:'✓', error:'✕', info:'ℹ' };
+      t.innerHTML = `<span>${icons[type]||'•'}</span><span>${msg}</span>`;
+      c.appendChild(t);
+      setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(50px)'; t.style.transition='all 0.3s ease'; }, 2800);
+      setTimeout(() => t.remove(), 3200);
+    }
+
+    function formatRs(n) { return 'Rs. ' + parseFloat(n||0).toFixed(2); }
+
+    // ── Sidebar HTML ──
+    function sidebar(active) {
+      return `
+        <aside class="admin-sidebar" id="sidebar">
+          <div class="admin-sidebar__logo">VEERA<span>WEAR</span> <span class="admin-sidebar__badge">ADMIN</span></div>
+          <nav class="admin-nav">
+            <div class="admin-nav__section">Main Menu</div>
+            <a href="index.html" class="admin-nav__link ${active==='dash'?'active':''}">
+              <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="8" y2="16"/><line x1="16" y1="10" x2="16" y2="16"/></svg></span> Dashboard
+            </a>
+            <a href="products.html" class="admin-nav__link ${active==='products'?'active':''}">
+              <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span> Products
+            </a>
+            <a href="orders.html" class="admin-nav__link ${active==='orders'?'active':''}">
+              <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span> Orders
+            </a>
+            <a href="customers.html" class="admin-nav__link ${active==='customers'?'active':''}">
+              <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span> Customers
+            </a>
+            <div class="admin-nav__section" style="margin-top:12px;">Account</div>
+            <a href="../index.html" class="admin-nav__link" target="_blank">
+              <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span> View Shop
+            </a>
+            <a href="#" class="admin-nav__link" onclick="doLogout()">
+              <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span> Logout
+            </a>
+          </nav>
+          <div class="admin-sidebar__footer">
+            <div class="admin-user-pill">
+              <div class="admin-user-pill__avatar" id="admin-avatar">A</div>
+              <div>
+                <div class="admin-user-pill__name" id="admin-name">Admin</div>
+                <div class="admin-user-pill__role">Super Admin</div>
+              </div>
+            </div>
+          </div>
+        </aside>
+        <div class="admin-sidebar-overlay" onclick="document.querySelector('.admin-sidebar').classList.remove('open'); this.classList.remove('active');"></div>`;
+    }
+
+    function doLogout() {
+      AdminAuth.logout();
+      renderLogin();
+    }
+
+    // ── Login ──
+    function renderLogin() {
+      document.getElementById('admin-root').innerHTML = `
+        <div class="admin-login-page">
+          <div class="admin-login-card">
+            <div class="admin-login-card__logo">VEERA<span>WEAR</span></div>
+            <p class="admin-login-card__subtitle">Sign in to your admin panel</p>
+            <form onsubmit="handleLogin(event)">
+              <div class="aform-group">
+                <label class="aform-label">Email Address</label>
+                <input type="email" class="aform-input" id="l-email" placeholder="admin@veerawear.com" required autofocus>
+              </div>
+              <div class="aform-group">
+                <label class="aform-label">Password</label>
+                <input type="password" class="aform-input" id="l-pass" placeholder="••••••••" required>
+              </div>
+              <button type="submit" class="abtn abtn--primary" style="width:100%;justify-content:center;padding:12px;margin-top:8px;">Sign In</button>
+            </form>
+          </div>
+        </div>`;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.textContent = 'Signing in...'; btn.disabled = true;
+      const ok = await AdminAuth.login(
+        document.getElementById('l-email').value,
+        document.getElementById('l-pass').value
+      );
+      if (ok) { await renderDashboard(); }
+      else { toast('Invalid credentials or not an admin user.', 'error'); btn.textContent = 'Sign In'; btn.disabled = false; }
+    }
+
+    // ── Dashboard ──
+    async function renderDashboard() {
+      const profile = Auth.getProfile();
+      const [
+        { data: orders },
+        { data: profiles },
+        { count: subscriberCount }
+      ] = await Promise.all([
+        supabase.from('orders').select('*').order('placed_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, email, created_at, is_admin'),
+        supabase.from('newsletter_subscribers').select('id', { count: 'exact', head: true })
+      ]);
+
+      const allOrders = orders || [];
+      const allProfiles = profiles || [];
+      const totalRevenue = allOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+      const thisMonth = allOrders.filter(o => new Date(o.placed_at) > new Date(Date.now() - 30 * 24 * 3600000));
+      const monthRevenue = thisMonth.reduce((s, o) => s + parseFloat(o.total || 0), 0);
+      const statusMap = { processing: 0, shipped: 0, delivered: 0 };
+      allOrders.forEach(o => { if (statusMap[o.status] !== undefined) statusMap[o.status]++; });
+
+      document.getElementById('admin-root').innerHTML = `
+        ${sidebar('dash')}
+        <div class="admin-main">
+          <div class="admin-topbar">
+            <div style="display:flex;align-items:center;">
+              <button class="mobile-toggle-btn" onclick="document.querySelector('.admin-sidebar').classList.toggle('open'); document.querySelector('.admin-sidebar-overlay').classList.toggle('active');" aria-label="Toggle Sidebar"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+              <div class="admin-topbar__title">Dashboard</div>
+            </div>
+            <div class="admin-topbar__actions">
+              <span style="font-size:12px;color:var(--admin-text-muted);">${new Date().toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</span>
+            </div>
+          </div>
+          <div class="admin-content">
+
+            <div class="kpi-grid">
+              <div class="kpi-card kpi-card--accent">
+                <div class="kpi-card__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+                <div class="kpi-card__label">Total Revenue</div>
+                <div class="kpi-card__value">${formatRs(totalRevenue)}</div>
+                <div class="kpi-card__sub">All time earnings</div>
+              </div>
+              <div class="kpi-card kpi-card--blue">
+                <div class="kpi-card__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+                <div class="kpi-card__label">Total Orders</div>
+                <div class="kpi-card__value">${allOrders.length}</div>
+                <div class="kpi-card__sub">${thisMonth.length} this month</div>
+              </div>
+              <div class="kpi-card kpi-card--green">
+                <div class="kpi-card__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <div class="kpi-card__label">Customers</div>
+                <div class="kpi-card__value">${allProfiles.length}</div>
+                <div class="kpi-card__sub">${subscriberCount || 0} subscribers</div>
+              </div>
+              <div class="kpi-card kpi-card--red">
+                <div class="kpi-card__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></div>
+                <div class="kpi-card__label">Month Revenue</div>
+                <div class="kpi-card__value">${formatRs(monthRevenue)}</div>
+                <div class="kpi-card__sub">${thisMonth.length} orders this month</div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;">
+              <div class="table-card">
+                <div class="table-card__header">
+                  <div class="table-card__title">Recent Orders</div>
+                  <a href="orders.html" class="abtn abtn--ghost abtn--sm">View All</a>
+                </div>
+                ${allOrders.length === 0 ? '<div class="empty-state"><div class="empty-state__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></div><div class="empty-state__title">No orders yet</div></div>' : `
+                <table class="admin-table">
+                  <thead><tr><th>Order ID</th><th>Customer</th><th>Total</th><th>Status</th></tr></thead>
+                  <tbody>${allOrders.slice(0, 8).map(o => `
+                    <tr>
+                      <td style="font-family:monospace;font-size:12px;">${o.order_number}</td>
+                      <td>${o.full_name || o.email || 'Guest'}</td>
+                      <td style="font-weight:700;">${formatRs(o.total)}</td>
+                      <td><span class="abadge abadge--${o.status==='delivered'?'green':o.status==='shipped'?'orange':'blue'}">${o.status}</span></td>
+                    </tr>`).join('')}
+                  </tbody>
+                </table>`}
+              </div>
+
+              <div class="table-card">
+                <div class="table-card__header">
+                  <div class="table-card__title">Order Status</div>
+                </div>
+                <div style="padding:20px;display:flex;flex-direction:column;gap:12px;">
+                  ${['processing','shipped','delivered'].map(s => {
+                    const icons = { processing:'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:#3b82f6;margin-right:6px;vertical-align:middle;"></span>', shipped:'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:#eab308;margin-right:6px;vertical-align:middle;"></span>', delivered:'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:#22c55e;margin-right:6px;vertical-align:middle;"></span>' };
+                    const count = statusMap[s] || 0;
+                    const pct = allOrders.length ? Math.round(count/allOrders.length*100) : 0;
+                    return `
+                      <div>
+                        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+                          <span>${icons[s]} ${s.charAt(0).toUpperCase()+s.slice(1)}</span>
+                          <span style="font-weight:700;">${count}</span>
+                        </div>
+                        <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+                          <div style="height:100%;width:${pct}%;background:${s==='delivered'?'var(--admin-green)':s==='shipped'?'var(--admin-orange)':'var(--admin-blue)'};border-radius:3px;transition:width 0.5s ease;"></div>
+                        </div>
+                      </div>`;
+                  }).join('')}
+                </div>
+
+                <div class="divider" style="margin:0;"></div>
+                <div style="padding:16px 20px;">
+                  <div style="font-size:12px;color:var(--admin-text-muted);margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Quick Links</div>
+                  <div style="display:flex;flex-direction:column;gap:6px;">
+                    <a href="products.html" class="abtn abtn--ghost abtn--sm" style="justify-content:flex-start;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Manage Products</a>
+                    <a href="orders.html" class="abtn abtn--ghost abtn--sm" style="justify-content:flex-start;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> View All Orders</a>
+                    <a href="customers.html" class="abtn abtn--ghost abtn--sm" style="justify-content:flex-start;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:text-bottom"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> View Customers</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>`;
+
+      // Set admin avatar
+      if (profile) {
+        const initials = (profile.full_name || profile.email || 'A').charAt(0).toUpperCase();
+        document.getElementById('admin-avatar').textContent = initials;
+        document.getElementById('admin-name').textContent = profile.full_name || profile.email;
+      }
+    }
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', async () => {
+      await Auth.init();
+      const isAdmin = await AdminAuth.isLoggedIn();
+      if (!isAdmin) { renderLogin(); return; }
+      await renderDashboard();
+    });
+  </script>
+</body>
+</html>
