@@ -218,12 +218,17 @@
   .cart-item__remove { position: absolute; right: var(--space-4); top: var(--space-4); }
 
   /* Checkout — stack form above summary */
-  .checkout-layout{grid-template-columns:1fr;}
-  .checkout-steps{flex-wrap:wrap;}
+  .checkout-layout{grid-template-columns:1fr; gap: var(--space-6);}
+  .checkout-steps{flex-wrap:wrap; justify-content: center; gap: var(--space-3);}
+  .checkout-step { flex: 1; min-width: 120px; padding: var(--space-2) var(--space-3); font-size: var(--fs-xs); justify-content: center; }
+  .checkout-step__num { width: 20px; height: 20px; font-size: 10px; }
+  .checkout-form { padding: var(--space-5); }
+  .checkout-form__title { font-size: var(--fs-lg); margin-bottom: var(--space-4); }
 
   /* Cart / Checkout summary — un-stick, reduce padding, prevent text clip */
   .cart-summary{position:static; padding:var(--space-5); overflow:visible;}
-  .cart-summary__row, .cart-summary__total{gap:var(--space-4);}
+  .cart-summary__row, .cart-summary__total{gap:var(--space-3);}
+  .cart-summary__total { font-size: var(--fs-md); }
 
   /* Account, Admin */
   .account-layout{grid-template-columns:1fr;}
