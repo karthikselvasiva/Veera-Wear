@@ -180,7 +180,7 @@
 
       try {
         // 1. Create Razorpay order on our Node server
-        const orderResponse = await fetch('http://localhost:3000/create-order', {
+        const orderResponse = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount: total, receipt: orderNumber })
@@ -199,7 +199,7 @@
           handler: async function (response) {
             try {
               // 3. Verify Payment
-              const verifyResponse = await fetch('http://localhost:3000/verify-payment', {
+              const verifyResponse = await fetch('/api/verify-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(response)
